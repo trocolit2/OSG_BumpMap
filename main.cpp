@@ -305,10 +305,10 @@ int main(int argc, char **argv) {
         osg::ref_ptr<osg::Image> difuse_image = osgDB::readImageFile(difuse_path);
         osg::ref_ptr<osg::Image> normal_image = osgDB::readImageFile(normal_path);
 
-        temp_geode->getDrawable(0)->asGeometry()->setStateSet(bumpMapShader(difuse_image, normal_image, scale_x, scale_y));
-        temp_node = temp_geode;
+//        temp_geode->getDrawable(0)->asGeometry()->setStateSet(bumpMapShader(difuse_image, normal_image, scale_x, scale_y));
+//        temp_node = temp_geode;
 
-//        temp_node = bumpMapOSG(temp_geode, normal_image, difuse_image, scale_x, scale_y);
+        temp_node = bumpMapOSG(temp_geode, normal_image, difuse_image, scale_x, scale_y);
     }
 
     bool setted = bumpRoot->setChild(i, temp_node);

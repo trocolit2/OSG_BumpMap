@@ -4,6 +4,7 @@
 #include <osg/Node>
 #include <osg/StateSet>
 #include <osg/TexMat>
+#include <osg/TexEnv>
 #include <osg/Texture2D>
 #include <osg/ShapeDrawable>
 #include <osg/Program>
@@ -56,8 +57,13 @@ osg::Geometry* createSquare(float textureCoordMax = 1.0f) {
 
 osg::ref_ptr<osg::StateSet> bumpMapShader(osg::Image *color_image, osg::Image *normal_image, double scale_x, double scale_y) {
 
-    if (!normal_image || !color_image) {
-        std::cout << "IMAGE FAIL" << std::endl;
+    if (!normal_image) {
+        std::cout << "NORMAL IMAGE FAIL" << std::endl;
+        exit(0);
+    }
+
+    if (!color_image) {
+        std::cout << "COLOR IMAGE FAIL" << std::endl;
         exit(0);
     }
 
@@ -92,6 +98,7 @@ osg::ref_ptr<osg::StateSet> bumpMapShader(osg::Image *color_image, osg::Image *n
     color->setMaxAnisotropy(8.0f);
 
     normal->setImage(normal_image);
+//    normal->setInternalFormat(GL_RGBA);
     normal->setDataVariance(osg::Object::DYNAMIC);
     normal->setFilter(osg::Texture::MIN_FILTER, osg::Texture::LINEAR_MIPMAP_LINEAR);
     normal->setFilter(osg::Texture::MAG_FILTER, osg::Texture::LINEAR);
@@ -105,8 +112,15 @@ osg::ref_ptr<osg::StateSet> bumpMapShader(osg::Image *color_image, osg::Image *n
     osg::Vec3d texScale(scale_x, scale_y, 1.0);
     texMat->setMatrix(osg::Matrix::scale(texScale));
 
+    osg::TexEnv* tex_env = new osg::TexEnv;
+    tex_env->setMode(osg::TexEnv::REPLACE);
+    tex_env->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 0.0f));
+
     const int TEXTURE_UNIT_NORMAL = 1;
     const int TEXTURE_UNIT_COLOR = 0;
+
+//    bumpState->setTextureAttribute(TEXTURE_UNIT_COLOR, tex_env, osg::StateAttribute::ON);
+//    bumpState->setTextureAttribute(TEXTURE_UNIT_NORMAL, tex_env, osg::StateAttribute::ON);
 
     bumpState->setTextureAttributeAndModes(TEXTURE_UNIT_COLOR, color, osg::StateAttribute::ON);
     bumpState->setTextureAttributeAndModes(TEXTURE_UNIT_COLOR, texMat, osg::StateAttribute::ON);
@@ -224,6 +238,9 @@ void selectTexture(int texture, std::string *normal_path, std::string *difuse_pa
     (*normal_path) = path + texture_type + "_n.jpg";
     (*difuse_path) = path + texture_type + "_d.jpg";
 
+//    (*normal_path) = path + texture_type + "_n.png";
+//    (*difuse_path) = path + texture_type + "_d.png";
+
 }
 
 int main(int argc, char **argv) {
@@ -237,12 +254,12 @@ int main(int argc, char **argv) {
 //    bumpModel->addDrawable(createSquare());
 //
 //    std::string normal_path, difuse_path;
-//    selectTexture(0, &normal_path, &difuse_path);
+//    selectTexture(8, &normal_path, &difuse_path);
 //
 //    osg::ref_ptr<osg::Image> difuse_image = osgDB::readImageFile(difuse_path);
 //    osg::ref_ptr<osg::Image> normal_image = osgDB::readImageFile(normal_path);
 //
-//    bumpModel->getDrawable(0)->asGeometry()->setStateSet(bumpMapShader(difuse_image, normal_image, 2, 2));
+//    bumpModel->getDrawable(0)->asGeometry()->setStateSet(bumpMapShader(difuse_image, normal_image, 1, 1));
 //    bumpRoot->addChild(bumpModel);
 //
 //    osgViewer::Viewer bumpViewer;
@@ -275,7 +292,7 @@ int main(int argc, char **argv) {
 //=====================================================================================
 //    EXTERNAL MODELS
     osg::ref_ptr<osg::Group> original_group = (osg::Group*) osgDB::readNodeFile(
-            "/home/tiagotrocoli/flat_fish/dev/bundles/flat_fish/models/sdf/oil_rig_manifold/old/visual_jacket.osg");
+            "/home/tiagotrocoli/flat_fish/dev/bundles/flat_fish/models/sdf/oil_rig_manifold/old/visual_floor.3ds");
 
     osg::ref_ptr<osg::Group> bumpRoot = (osg::Group*) osgDB::readNodeFile("out.osg");
     if (!bumpRoot)
@@ -305,10 +322,10 @@ int main(int argc, char **argv) {
         osg::ref_ptr<osg::Image> difuse_image = osgDB::readImageFile(difuse_path);
         osg::ref_ptr<osg::Image> normal_image = osgDB::readImageFile(normal_path);
 
-//        temp_geode->getDrawable(0)->asGeometry()->setStateSet(bumpMapShader(difuse_image, normal_image, scale_x, scale_y));
-//        temp_node = temp_geode;
+        temp_geode->getDrawable(0)->asGeometry()->setStateSet(bumpMapShader(difuse_image, normal_image, scale_x, scale_y));
+        temp_node = temp_geode;
 
-        temp_node = bumpMapOSG(temp_geode, normal_image, difuse_image, scale_x, scale_y);
+//        temp_node = bumpMapOSG(temp_geode, normal_image, difuse_image, scale_x, scale_y);
     }
 
     bool setted = bumpRoot->setChild(i, temp_node);

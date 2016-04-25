@@ -20,8 +20,69 @@
 #include <osgGA/TrackballManipulator>
 #include <osgViewer/Viewer>
 
+#include <osgUtil/Optimizer>
+
 #include <iostream>
 #include <string>
+#include <stdexcept>
+#include <vector>
+
+#define TEXTURE_NUM 10
+
+const int TEXTURE_UNIT_SHADER_SPECULAR = 2;
+const int TEXTURE_UNIT_SHADER_NORMAL = 1;
+const int TEXTURE_UNIT_SHADER_DIFFUSE = 0;
+
+osg::Geometry* scale_texture(osg::Geometry *geometry, double scale_x, double scale_y, const int texture_unit_diffuse, const int texture_unit_normal =
+        -1, const int texture_unit_specular = -1) {
+
+    osg::Vec2Array* tex_coord = dynamic_cast<osg::Vec2Array*>(geometry->getTexCoordArray(0));
+    for (unsigned int i = 0; i < tex_coord->getNumElements(); ++i)
+        (*tex_coord)[i].set((*tex_coord)[i].x() * scale_x, (*tex_coord)[i].y() * scale_y);
+    if (tex_coord) {
+        geometry->setTexCoordArray(texture_unit_diffuse, tex_coord);
+        if (texture_unit_normal > -1)
+            geometry->setTexCoordArray(TEXTURE_UNIT_SHADER_NORMAL, tex_coord);
+        if (texture_unit_specular > -1)
+            geometry->setTexCoordArray(TEXTURE_UNIT_SHADER_SPECULAR, tex_coord);
+    } else {
+        std::cout << "MISS TEXTURE COORDINATE " << std::endl;
+        exit(0);
+    }
+
+    return geometry;
+}
+
+osg::StateSet* createShaderBumpMap(const int texture_unit_diffuse, const int texture_unit_normal, const int texture_unit_specular,
+        osg::StateSet* temp_state = 0) {
+
+    if (temp_state == 0)
+        temp_state = new osg::StateSet();
+
+    osg::Program* bumpMapProgramObject = new osg::Program;
+
+    // Set shader
+    osg::Shader* bumpVertexObject = new osg::Shader(osg::Shader::VERTEX);
+    osg::Shader* bumpFragmentObject = new osg::Shader(osg::Shader::FRAGMENT);
+
+    std::string bumpVertexFileName = osgDB::findDataFile("bump_map.vert");
+    bumpVertexObject->loadShaderSourceFromFile(bumpVertexFileName.c_str());
+    std::string bumpFragmentFileName = osgDB::findDataFile("bump_map.frag");
+    bumpFragmentObject->loadShaderSourceFromFile(bumpFragmentFileName.c_str());
+
+    bumpMapProgramObject->addShader(bumpVertexObject);
+    bumpMapProgramObject->addShader(bumpFragmentObject);
+
+    temp_state->addUniform(new osg::Uniform("normalTexture", texture_unit_normal));
+    temp_state->addUniform(new osg::Uniform("diffuseTexture", texture_unit_diffuse));
+    temp_state->addUniform(new osg::Uniform("specularTexture", texture_unit_specular));
+    temp_state->setAttributeAndModes(bumpMapProgramObject, osg::StateAttribute::ON);
+    temp_state->setDataVariance(osg::Object::STATIC);
+
+    return temp_state;
+}
+
+//std::vector<osg::ref_ptr<osg::Texture2D> > normal_textures, difuse_textures, specular_textures;
 
 bool writeOSGFileFromNode(osg::Node &node, std::string out_file = "out.osg") {
 
@@ -55,8 +116,8 @@ osg::Geometry* createSquare(float textureCoordMax = 1.0f) {
     return geom;
 }
 
-osg::ref_ptr<osg::StateSet> bumpMapShader(osg::Image *color_image, osg::Image *normal_image, osg::Image *specular_image, double scale_x,
-        double scale_y) {
+osg::ref_ptr<osg::StateSet> insertBumpMapTexture(osg::Image *color_image, osg::Image *normal_image, osg::Image *specular_image,
+        const int texture_unit_diffuse, const int texture_unit_normal, const int texture_unit_specular) {
 
     if (!normal_image) {
         std::cout << "NORMAL IMAGE FAIL" << std::endl;
@@ -74,21 +135,6 @@ osg::ref_ptr<osg::StateSet> bumpMapShader(osg::Image *color_image, osg::Image *n
     }
 
     osg::StateSet* bumpState = new osg::StateSet();
-
-    // Stateset shader program
-    osg::Program* bumpMapProgramObject = new osg::Program;
-
-    // Set shader
-    osg::Shader* bumpVertexObject = new osg::Shader(osg::Shader::VERTEX);
-    osg::Shader* bumpFragmentObject = new osg::Shader(osg::Shader::FRAGMENT);
-
-    std::string bumpVertexFileName = osgDB::findDataFile("bump_map.vert");
-    bumpVertexObject->loadShaderSourceFromFile(bumpVertexFileName.c_str());
-    std::string bumpFragmentFileName = osgDB::findDataFile("bump_map.frag");
-    bumpFragmentObject->loadShaderSourceFromFile(bumpFragmentFileName.c_str());
-
-    bumpMapProgramObject->addShader(bumpVertexObject);
-    bumpMapProgramObject->addShader(bumpFragmentObject);
 
     // Set textures
     osg::Texture2D *normal = new osg::Texture2D();
@@ -122,35 +168,9 @@ osg::ref_ptr<osg::StateSet> bumpMapShader(osg::Image *color_image, osg::Image *n
     specular->setResizeNonPowerOfTwoHint(false);
     specular->setMaxAnisotropy(8.0f);
 
-    // Set texture matrix
-    osg::TexMat* texMat = new osg::TexMat;
-    osg::Vec3d texScale(scale_x, scale_y, 1.0);
-    texMat->setMatrix(osg::Matrix::scale(texScale));
-
-    osg::TexEnv* tex_env = new osg::TexEnv;
-    tex_env->setMode(osg::TexEnv::REPLACE);
-    tex_env->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 0.0f));
-
-    const int TEXTURE_UNIT_SPECULAR = 2;
-    const int TEXTURE_UNIT_NORMAL = 1;
-    const int TEXTURE_UNIT_COLOR = 0;
-
-//    bumpState->setTextureAttribute(TEXTURE_UNIT_COLOR, tex_env, osg::StateAttribute::ON);
-//    bumpState->setTextureAttribute(TEXTURE_UNIT_NORMAL, tex_env, osg::StateAttribute::ON);
-
-    bumpState->setTextureAttributeAndModes(TEXTURE_UNIT_COLOR, color, osg::StateAttribute::ON);
-    bumpState->setTextureAttributeAndModes(TEXTURE_UNIT_COLOR, texMat, osg::StateAttribute::ON);
-
-    bumpState->setTextureAttributeAndModes(TEXTURE_UNIT_NORMAL, normal, osg::StateAttribute::ON);
-    bumpState->setTextureAttributeAndModes(TEXTURE_UNIT_NORMAL, texMat, osg::StateAttribute::ON);
-
-    bumpState->setTextureAttributeAndModes(TEXTURE_UNIT_SPECULAR, specular, osg::StateAttribute::ON);
-    bumpState->setTextureAttributeAndModes(TEXTURE_UNIT_SPECULAR, texMat, osg::StateAttribute::ON);
-
-    bumpState->addUniform(new osg::Uniform("normalTexture", TEXTURE_UNIT_NORMAL));
-    bumpState->addUniform(new osg::Uniform("diffuseTexture", TEXTURE_UNIT_COLOR));
-    bumpState->addUniform(new osg::Uniform("specularTexture", TEXTURE_UNIT_SPECULAR));
-    bumpState->setAttributeAndModes(bumpMapProgramObject, osg::StateAttribute::ON);
+    bumpState->setTextureAttributeAndModes(texture_unit_diffuse, color, osg::StateAttribute::ON | osg::StateAttribute::PROTECTED);
+    bumpState->setTextureAttributeAndModes(texture_unit_normal, normal, osg::StateAttribute::ON | osg::StateAttribute::PROTECTED);
+    bumpState->setTextureAttributeAndModes(texture_unit_specular, specular, osg::StateAttribute::ON | osg::StateAttribute::PROTECTED);
 
     return bumpState;
 }
@@ -255,7 +275,7 @@ void selectTexture(int texture, std::string *normal_path, std::string *difuse_pa
         texture_type = "pedras_texture";
         break;
     default:
-        exit(0);
+        texture_type = "";
         break;
     }
 
@@ -268,30 +288,94 @@ void selectTexture(int texture, std::string *normal_path, std::string *difuse_pa
 
 }
 
-int main(int argc, char **argv) {
-//    int bla(int argc, char **argv) {
+osg::Geode* applyGeometryScaleAndTexture(osg::Group* group, osg::Geometry* geometry, int texture, double scale_x, double scale_y) {
 
-// LOCAL TESTES SHADER BUMP MAP
-    osg::Group* bumpRoot = new osg::Group();
+    // scale texture process on geometry, without stateset
+    geometry = scale_texture(geometry, scale_x, scale_y, TEXTURE_UNIT_SHADER_DIFFUSE, TEXTURE_UNIT_SHADER_NORMAL, TEXTURE_UNIT_SHADER_SPECULAR);
+    geometry->setStateSet(new osg::StateSet);
+    // insert Textures on geometry
+    osg::ref_ptr<osg::Geode> geode = group->getChild(texture)->asGeode();
 
-    // Model with bump mapping
-    osg::Geode* bumpModel = new osg::Geode;
-    bumpModel->addDrawable(createSquare());
+    geode->addDrawable(geometry);
+    std::cout << " ADD NODE " << std::endl;
+
+    // show texture applied
 
     std::string normal_path, difuse_path, specular_path;
-    selectTexture(9, &normal_path, &difuse_path, &specular_path);
+    selectTexture(texture, &normal_path, &difuse_path, &specular_path);
 
     osg::ref_ptr<osg::Image> difuse_image = osgDB::readImageFile(difuse_path);
     osg::ref_ptr<osg::Image> normal_image = osgDB::readImageFile(normal_path);
     osg::ref_ptr<osg::Image> specular_image = osgDB::readImageFile(specular_path);
 
-    bumpModel->getDrawable(0)->asGeometry()->setStateSet(bumpMapShader(difuse_image, normal_image, specular_image, 1, 1));
-    bumpRoot->addChild(bumpModel);
+    osg::Geode* geode_new(new osg::Geode);
+    geode_new->setStateSet(
+            insertBumpMapTexture(difuse_image, normal_image, specular_image, TEXTURE_UNIT_SHADER_DIFFUSE, TEXTURE_UNIT_SHADER_NORMAL,
+                    TEXTURE_UNIT_SHADER_SPECULAR));
+    geode_new->addDrawable(geometry);
+    return geode_new;
 
-    osgViewer::Viewer bumpViewer;
-    bumpViewer.setSceneData(bumpRoot);
-    bumpViewer.setCameraManipulator(new osgGA::TrackballManipulator());
-    bumpViewer.run();
+}
+
+void addGeodeTexture(osg::Group* group) {
+
+    for (int i = 0; i < TEXTURE_NUM; ++i) {
+        std::string normal_path, difuse_path, specular_path;
+        selectTexture(i, &normal_path, &difuse_path, &specular_path);
+
+        osg::ref_ptr<osg::Image> difuse_image = osgDB::readImageFile(difuse_path);
+        osg::ref_ptr<osg::Image> normal_image = osgDB::readImageFile(normal_path);
+        osg::ref_ptr<osg::Image> specular_image = osgDB::readImageFile(specular_path);
+        osg::ref_ptr<osg::Geode> geode(new osg::Geode);
+        geode->setStateSet(
+                insertBumpMapTexture(difuse_image, normal_image, specular_image, TEXTURE_UNIT_SHADER_DIFFUSE, TEXTURE_UNIT_SHADER_NORMAL,
+                        TEXTURE_UNIT_SHADER_SPECULAR));
+        group->addChild(geode);
+    }
+    // geode without texture
+    osg::ref_ptr<osg::Geode> geode(new osg::Geode);
+    group->addChild(geode);
+
+}
+
+void removeGeodeWithoutDrawable(osg::Group* group) {
+
+    unsigned int num_children = group->getNumChildren();
+    osg::Geode* uselessChildren[num_children];
+
+    for (unsigned int i = 0; i < num_children; ++i)
+        if (group->getChild(i)->asGeode()->getNumDrawables() == 0)
+            uselessChildren[i] = group->getChild(i)->asGeode();
+
+    for (unsigned int i = 0; i < num_children; ++i) {
+        group->removeChild(uselessChildren[i]);
+    }
+
+}
+
+int main(int argc, char **argv) {
+//    int bla(int argc, char **argv) {
+
+// LOCAL TESTES SHADER BUMP MAP
+//    osg::Group* bumpRoot = new osg::Group();
+//// insert shader bumpMap
+//    bumpRoot->setStateSet(createShaderBumpMap(TEXTURE_UNIT_SHADER_DIFFUSE, TEXTURE_UNIT_SHADER_NORMAL, TEXTURE_UNIT_SHADER_SPECULAR));
+//// Insert texture in Geode
+//    addGeodeTexture(bumpRoot);
+//
+//// Create Geometry
+//    osg::ref_ptr<osg::Geometry> geometry = createSquare();
+//
+//// Scale texture on Geometry and make child of parent with desired texture
+//    applyBumpMapShader(bumpRoot, geometry, 9, 1, 1);
+//
+//// remove geode without drawable geometry
+//    removeGeodeWithoutDrawable(bumpRoot);
+//
+//    osgViewer::Viewer bumpViewer;
+//    bumpViewer.setSceneData(bumpRoot);
+//    bumpViewer.setCameraManipulator(new osgGA::TrackballManipulator());
+//    bumpViewer.run();
 
 //================================================================
 
@@ -316,57 +400,70 @@ int main(int argc, char **argv) {
 //    bumpViewer.run();
 
 //=====================================================================================
-//    EXTERNAL MODELS
-//    osg::ref_ptr<osg::Group> original_group = (osg::Group*) osgDB::readNodeFile(
-//            "/home/tiagotrocoli/flat_fish/dev/bundles/flat_fish/models/sdf/oil_rig_manifold/old/visual_wellhead_1.3ds");
-//
-//    osg::ref_ptr<osg::Group> bumpRoot = (osg::Group*) osgDB::readNodeFile("out.osg");
-//    if (!bumpRoot)
-//        bumpRoot = new osg::Group();
-//
-//    int total = original_group->getNumChildren();
-//
-//    int i = atoi(argv[2]);
-//
-//    osg::ref_ptr<osg::Geode> temp_geode = (osg::Geode*) original_group->getChild(i);
-//    std::cout << "INDEX = " << i;
-//    std::cout << " TOTAL = " << total;
-//    std::cout << "  % = " << i * 1.0 / total << std::endl;
-//    osg::ref_ptr<osg::Node> temp_node;
-//
-//    if (argv[1][0] == 's') {
-//        temp_node = temp_geode;
-//
-//    } else {
-//
-//        int texture = atoi(argv[3]);
-//        double scale_x = atof(argv[4]);
-//        double scale_y = atof(argv[5]);
-//
-//        std::string normal_path, difuse_path;
-//        selectTexture(texture, &normal_path, &difuse_path);
-//        osg::ref_ptr<osg::Image> difuse_image = osgDB::readImageFile(difuse_path);
-//        osg::ref_ptr<osg::Image> normal_image = osgDB::readImageFile(normal_path);
-//
-//        temp_geode->getDrawable(0)->asGeometry()->setStateSet(bumpMapShader(difuse_image, normal_image, scale_x, scale_y));
-//        temp_node = temp_geode;
-//
-////        temp_node = bumpMapOSG(temp_geode, normal_image, difuse_image, scale_x, scale_y);
-//    }
-//
-//    bool setted = bumpRoot->setChild(i, temp_node);
-//    if (!setted) {
-//        std::cout << "ADD NODE" << std::endl;
-//        bumpRoot->addChild(temp_node);
-//    }
-//
-//    if (argv[5]) {
-//        osgViewer::Viewer bumpViewer;
-//        bumpViewer.setSceneData(temp_node);
-//        bumpViewer.setCameraManipulator(new osgGA::TrackballManipulator());
-//        bumpViewer.run();
-//    }
-// write
+
+    osg::ref_ptr<osg::Group> bumpRoot = (osg::Group*) osgDB::readNodeFile("out.osg");
+    if (!bumpRoot) {
+        std::cout << " CREATE A NEW GROUP" << std::endl;
+        bumpRoot = new osg::Group();
+        bumpRoot->setStateSet(createShaderBumpMap(TEXTURE_UNIT_SHADER_DIFFUSE, TEXTURE_UNIT_SHADER_NORMAL, TEXTURE_UNIT_SHADER_SPECULAR));
+        addGeodeTexture(bumpRoot);
+    }
+
+    if (argv[1][0] == 'o') {
+        std::cout << " CUSTOM OPTIMIZE START" << std::endl;
+        osg::ref_ptr<osg::Group> local_root(new osg::Group);
+
+        // reduce number of groups
+        std::cout << " REDUCE GROUPS" << std::endl;
+        local_root->setStateSet(bumpRoot->getChild(0)->getOrCreateStateSet());
+        for (unsigned int i = 0; i < bumpRoot->getNumChildren(); ++i)
+            for (unsigned int j = 0; j < bumpRoot->getChild(i)->asGroup()->getNumChildren(); ++j)
+                local_root->addChild(bumpRoot->getChild(i)->asGroup()->getChild(j));
+
+        bumpRoot = local_root;
+        std::cout << " OPTIMIZE DONE" << std::endl;
+
+    } else if (argv[1][0] == 'r') {
+        std::cout << " REMOVE USELESS GEODE" << std::endl;
+        removeGeodeWithoutDrawable(bumpRoot);
+        std::cout << " REMOVE DONE" << std::endl;
+
+    } else {
+
+        osg::ref_ptr<osg::Group> original_group = (osg::Group*) osgDB::readNodeFile("wellhead_3_shader.osgb");//bumpMapShader/visual_wellhead_1_shader.osgb
+        int i = atoi(argv[2]);
+
+        osg::Node* temp_node;
+        osg::Geode* geode_original = (osg::Geode*) original_group->getChild(i);
+
+        int total_object = original_group->getNumChildren();
+        int total_object_writen = bumpRoot->getNumChildren();
+
+        std::cout << "OBJECT " << i;
+        std::cout << " |  TOTAL ORIGINAL " << total_object;
+        std::cout << std::endl;
+
+        if (argv[1][0] == 's') {
+            temp_node = geode_original;
+            bumpRoot->getChild(TEXTURE_NUM)->asGeode()->addDrawable(geode_original->getDrawable(0));
+
+        } else if (argv[1][0] == 'm') {
+            int texture = atoi(argv[3]);
+            double scale_x = atof(argv[4]);
+            double scale_y = atof(argv[5]);
+
+            temp_node = applyGeometryScaleAndTexture(bumpRoot, geode_original->getDrawable(0)->asGeometry(), texture, scale_x, scale_y);
+            temp_node->setStateSet(
+                    createShaderBumpMap(TEXTURE_UNIT_SHADER_DIFFUSE, TEXTURE_UNIT_SHADER_NORMAL, TEXTURE_UNIT_SHADER_SPECULAR,
+                            temp_node->getOrCreateStateSet()));
+        }
+
+        osgViewer::Viewer bumpViewer;
+        bumpViewer.setSceneData(temp_node);
+        bumpViewer.setCameraManipulator(new osgGA::TrackballManipulator());
+        bumpViewer.run();
+    }
+
     if (writeOSGFileFromNode((*bumpRoot)))
         std::cout << " --> FILE WROTE!!" << std::endl;
 

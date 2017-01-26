@@ -37,14 +37,20 @@ osg::Geometry* scale_texture(osg::Geometry *geometry, double scale_x, double sca
         -1, const int texture_unit_specular = -1) {
 
     osg::Vec2Array* tex_coord = dynamic_cast<osg::Vec2Array*>(geometry->getTexCoordArray(0));
+    if(tex_coord)
     for (unsigned int i = 0; i < tex_coord->getNumElements(); ++i)
         (*tex_coord)[i].set((*tex_coord)[i].x() * scale_x, (*tex_coord)[i].y() * scale_y);
+    else{
+      std::cout << "MISS TEXTURE COORDINATE VECTOR " << std::endl;
+      exit(0);
+    }
+
     if (tex_coord) {
         geometry->setTexCoordArray(texture_unit_diffuse, tex_coord);
         if (texture_unit_normal > -1)
             geometry->setTexCoordArray(TEXTURE_UNIT_SHADER_NORMAL, tex_coord);
-        if (texture_unit_specular > -1)
-            geometry->setTexCoordArray(TEXTURE_UNIT_SHADER_SPECULAR, tex_coord);
+        // if (texture_unit_specular > -1)
+        //     geometry->setTexCoordArray(TEXTURE_UNIT_SHADER_SPECULAR, tex_coord);
     } else {
         std::cout << "MISS TEXTURE COORDINATE " << std::endl;
         exit(0);
@@ -159,18 +165,18 @@ osg::ref_ptr<osg::StateSet> insertBumpMapTexture(osg::Image *color_image, osg::I
     normal->setResizeNonPowerOfTwoHint(false);
     normal->setMaxAnisotropy(8.0f);
 
-    specular->setImage(specular_image);
-    specular->setDataVariance(osg::Object::DYNAMIC);
-    specular->setFilter(osg::Texture::MIN_FILTER, osg::Texture::LINEAR_MIPMAP_LINEAR);
-    specular->setFilter(osg::Texture::MAG_FILTER, osg::Texture::LINEAR);
-    specular->setWrap(osg::Texture::WRAP_S, osg::Texture::REPEAT);
-    specular->setWrap(osg::Texture::WRAP_T, osg::Texture::REPEAT);
-    specular->setResizeNonPowerOfTwoHint(false);
-    specular->setMaxAnisotropy(8.0f);
+    // specular->setImage(specular_image);
+    // specular->setDataVariance(osg::Object::DYNAMIC);
+    // specular->setFilter(osg::Texture::MIN_FILTER, osg::Texture::LINEAR_MIPMAP_LINEAR);
+    // specular->setFilter(osg::Texture::MAG_FILTER, osg::Texture::LINEAR);
+    // specular->setWrap(osg::Texture::WRAP_S, osg::Texture::REPEAT);
+    // specular->setWrap(osg::Texture::WRAP_T, osg::Texture::REPEAT);
+    // specular->setResizeNonPowerOfTwoHint(false);
+    // specular->setMaxAnisotropy(8.0f);
 
-    bumpState->setTextureAttributeAndModes(texture_unit_diffuse, color, osg::StateAttribute::ON | osg::StateAttribute::PROTECTED);
-    bumpState->setTextureAttributeAndModes(texture_unit_normal, normal, osg::StateAttribute::ON | osg::StateAttribute::PROTECTED);
-    bumpState->setTextureAttributeAndModes(texture_unit_specular, specular, osg::StateAttribute::ON | osg::StateAttribute::PROTECTED);
+    bumpState->setTextureAttributeAndModes(texture_unit_diffuse, color, osg::StateAttribute::ON );
+    bumpState->setTextureAttributeAndModes(texture_unit_normal, normal, osg::StateAttribute::OFF );
+    // bumpState->setTextureAttributeAndModes(texture_unit_specular, specular, osg::StateAttribute::ON | osg::StateAttribute::PROTECTED);
 
     return bumpState;
 }
@@ -206,11 +212,11 @@ osgFX::BumpMapping* bumpMapOSG(osg::Geode *geode, osg::Image *normal_image, osg:
     difuse_texture->setResizeNonPowerOfTwoHint(false);
     difuse_texture->setMaxAnisotropy(8.0f);
 
-    const int TEXTURE_UNIT_NORMAL = 1;
-    const int TEXTURE_UNIT_DIFUSE = 2;
+    const int TEXTURE_UNIT_NORMAL = 0;
+    const int TEXTURE_UNIT_DIFUSE = 1;
 
-    bumpState->setTextureAttributeAndModes(TEXTURE_UNIT_NORMAL, normal_texture, osg::StateAttribute::ON);
-    bumpState->setTextureAttributeAndModes(TEXTURE_UNIT_DIFUSE, difuse_texture, osg::StateAttribute::ON);
+    bumpState->setTextureAttributeAndModes(TEXTURE_UNIT_NORMAL, normal_texture, osg::StateAttribute::OFF );
+    bumpState->setTextureAttributeAndModes(TEXTURE_UNIT_DIFUSE, difuse_texture, osg::StateAttribute::ON  );
 
     osg::ref_ptr<osg::Geometry> geometry = geode->asGeode()->getDrawable(0)->asGeometry();
     osg::Vec2Array* tex_coord = dynamic_cast<osg::Vec2Array*>(geometry->getTexCoordArray(0));
@@ -244,7 +250,7 @@ void selectTexture(int texture, std::string *normal_path, std::string *difuse_pa
 
     std::string texture_type;
     switch (texture) {
-    case 0:
+    case 10:
         texture_type = "gray_texture";
         break;
     case 1:
@@ -290,11 +296,16 @@ void selectTexture(int texture, std::string *normal_path, std::string *difuse_pa
 
 osg::Geode* applyGeometryScaleAndTexture(osg::Group* group, osg::Geometry* geometry, int texture, double scale_x, double scale_y) {
 
+    std::cout << "passei aqui 2.0 " << std::endl;
     // scale texture process on geometry, without stateset
     geometry = scale_texture(geometry, scale_x, scale_y, TEXTURE_UNIT_SHADER_DIFFUSE, TEXTURE_UNIT_SHADER_NORMAL, TEXTURE_UNIT_SHADER_SPECULAR);
+    std::cout << "passei aqui 2.1 " << std::endl;
     geometry->setStateSet(new osg::StateSet);
+    std::cout << "passei aqui 2.2 " << std::endl;
     // insert Textures on geometry
     osg::ref_ptr<osg::Geode> geode = group->getChild(texture)->asGeode();
+    std::cout << "passei aqui 2.3 " << std::endl;
+
 
     geode->addDrawable(geometry);
     std::cout << " ADD NODE " << std::endl;
@@ -319,7 +330,10 @@ osg::Geode* applyGeometryScaleAndTexture(osg::Group* group, osg::Geometry* geome
 
 void addGeodeTexture(osg::Group* group) {
 
-    for (int i = 0; i < TEXTURE_NUM; ++i) {
+    osg::ref_ptr<osg::Geode> geode(new osg::Geode);
+    group->addChild(geode);
+
+    for (int i = 1; i <= TEXTURE_NUM; ++i) {
         std::string normal_path, difuse_path, specular_path;
         selectTexture(i, &normal_path, &difuse_path, &specular_path);
 
@@ -333,8 +347,7 @@ void addGeodeTexture(osg::Group* group) {
         group->addChild(geode);
     }
     // geode without texture
-    osg::ref_ptr<osg::Geode> geode(new osg::Geode);
-    group->addChild(geode);
+
 
 }
 
@@ -382,12 +395,12 @@ int main(int argc, char **argv) {
 //    // LOCAL TESTES BUMP MAP
 //    osg::Group* bumpRoot = new osg::Group();
 //
-//// Model with bump mapping
+// // Model with bump mapping
 //    osg::Geode* bumpModel = new osg::Geode;
 //    bumpModel->addDrawable(createSquare());
 //
 //    std::string color_path, normal_path, difuse_path;
-//    selectTexture(8, &normal_path, &difuse_path);
+//    selectTexture(3, &normal_path, &difuse_path, &color_path);
 //
 //    osg::ref_ptr<osg::Image> difuse_image = osgDB::readImageFile(difuse_path);
 //    osg::ref_ptr<osg::Image> normal_image = osgDB::readImageFile(normal_path);
@@ -400,73 +413,89 @@ int main(int argc, char **argv) {
 //    bumpViewer.run();
 
 //=====================================================================================
-
+    //
     osg::ref_ptr<osg::Group> bumpRoot = (osg::Group*) osgDB::readNodeFile("out.osg");
     if (!bumpRoot) {
         std::cout << " CREATE A NEW GROUP" << std::endl;
         bumpRoot = new osg::Group();
-        bumpRoot->setStateSet(createShaderBumpMap(TEXTURE_UNIT_SHADER_DIFFUSE, TEXTURE_UNIT_SHADER_NORMAL, TEXTURE_UNIT_SHADER_SPECULAR));
+        // bumpRoot->setStateSet(createShaderBumpMap(TEXTURE_UNIT_SHADER_DIFFUSE, TEXTURE_UNIT_SHADER_NORMAL, TEXTURE_UNIT_SHADER_SPECULAR));
         addGeodeTexture(bumpRoot);
     }
+    std::string sdf_name = "docking_station";
+    std::string file_name = "visual_bkp.osgb";
+    std::string main_path = "/home/trocoli/dev.bir/bundles/gazebo_scenes/models/sdf/";
+    std::string final_path = main_path + sdf_name + "/" + file_name;
 
-    if (argv[1][0] == 'o') {
-        std::cout << " CUSTOM OPTIMIZE START" << std::endl;
-        osg::ref_ptr<osg::Group> local_root(new osg::Group);
+    std::cout << " path = " << final_path << std::endl;
 
-        // reduce number of groups
-        std::cout << " REDUCE GROUPS" << std::endl;
-        local_root->setStateSet(bumpRoot->getChild(0)->getOrCreateStateSet());
-        for (unsigned int i = 0; i < bumpRoot->getNumChildren(); ++i)
-            for (unsigned int j = 0; j < bumpRoot->getChild(i)->asGroup()->getNumChildren(); ++j)
-                local_root->addChild(bumpRoot->getChild(i)->asGroup()->getChild(j));
+    osg::ref_ptr<osg::Group> temp_node;
 
-        bumpRoot = local_root;
-        std::cout << " OPTIMIZE DONE" << std::endl;
+    char select = argv[1][0];
 
-    } else if (argv[1][0] == 'r') {
-        std::cout << " REMOVE USELESS GEODE" << std::endl;
-        removeGeodeWithoutDrawable(bumpRoot);
-        std::cout << " REMOVE DONE" << std::endl;
+    if (select == 'r') {
+      std::cout << " REMOVE USELESS GEODE" << std::endl;
+      removeGeodeWithoutDrawable(bumpRoot);
+      std::cout << " REMOVE DONE" << std::endl;
 
     } else {
 
-        osg::ref_ptr<osg::Group> original_group = (osg::Group*) osgDB::readNodeFile("wellhead_3_shader.osgb");//bumpMapShader/visual_wellhead_1_shader.osgb
-        int i = atoi(argv[2]);
+      int i = atoi(argv[2]);
 
-        osg::Node* temp_node;
-        osg::Geode* geode_original = (osg::Geode*) original_group->getChild(i);
+      osg::ref_ptr<osg::Group> original_group = (osg::Group*) osgDB::readNodeFile(final_path);//bumpMapShader/visual_wellhead_1_shader.osgb
+      osg::Geode* geode_original = (osg::Geode*) original_group->getChild(i);
 
-        int total_object = original_group->getNumChildren();
-        int total_object_writen = bumpRoot->getNumChildren();
+      int texture = atoi(argv[3]);
+      double scale_x = atof(argv[4]);
+      double scale_y = atof(argv[5]);
 
-        std::cout << "OBJECT " << i;
-        std::cout << " |  TOTAL ORIGINAL " << total_object;
-        std::cout << std::endl;
+      osg::Geometry* geom = scale_texture(
+        geode_original->getDrawable(0)->asGeometry(),
+        scale_x, scale_y,
+        TEXTURE_UNIT_SHADER_DIFFUSE,
+        TEXTURE_UNIT_SHADER_NORMAL,
+        TEXTURE_UNIT_SHADER_SPECULAR);
 
-        if (argv[1][0] == 's') {
-            temp_node = geode_original;
-            bumpRoot->getChild(TEXTURE_NUM)->asGeode()->addDrawable(geode_original->getDrawable(0));
+      if (select == 'p'){
+        std::cout << "entrou aqui" << std::endl;
+        temp_node = new osg::Group();
+        addGeodeTexture(temp_node);
+        temp_node->getChild(texture)->asGeode()->addDrawable(geom);
 
-        } else if (argv[1][0] == 'm') {
-            int texture = atoi(argv[3]);
-            double scale_x = atof(argv[4]);
-            double scale_y = atof(argv[5]);
+      }
 
-            temp_node = applyGeometryScaleAndTexture(bumpRoot, geode_original->getDrawable(0)->asGeometry(), texture, scale_x, scale_y);
-            temp_node->setStateSet(
-                    createShaderBumpMap(TEXTURE_UNIT_SHADER_DIFFUSE, TEXTURE_UNIT_SHADER_NORMAL, TEXTURE_UNIT_SHADER_SPECULAR,
-                            temp_node->getOrCreateStateSet()));
-        }
+      if (select == 't' || select == 'f') {
+        std::cout << "entrou aqui 2 " << std::endl;
+        bumpRoot->getChild(texture)->asGeode()->addDrawable(geom);
+      }
 
-        osgViewer::Viewer bumpViewer;
+      int total_bumproot = 0;
+
+      for (int i = 0; i < bumpRoot->getNumChildren(); i++)
+        total_bumproot += bumpRoot->getChild(i)->asGeode()->getNumDrawables(); 
+
+      int total_object = original_group->getNumChildren();
+      int total_object_writen = bumpRoot->getNumChildren();
+
+      std::cout << "OBJECT " << i;
+      std::cout << " |  TOTAL ORIGINAL " << total_object;
+      std::cout << " |  TOTAL OUT.OSG " << total_bumproot;
+      std::cout << std::endl;
+
+      osgViewer::Viewer bumpViewer;
+      if(temp_node)
         bumpViewer.setSceneData(temp_node);
-        bumpViewer.setCameraManipulator(new osgGA::TrackballManipulator());
-        bumpViewer.run();
+      else
+        bumpViewer.setSceneData(bumpRoot);
+      bumpViewer.setCameraManipulator(new osgGA::TrackballManipulator());
+      bumpViewer.run();
+
     }
 
-    if (writeOSGFileFromNode((*bumpRoot)))
+    bool write_flag = (select == 'p') || (select == 'f');
+    if (  !write_flag &&
+          writeOSGFileFromNode((*bumpRoot))){
         std::cout << " --> FILE WROTE!!" << std::endl;
+      }
 
     return 0;
 }
-
